@@ -4,7 +4,8 @@ from store import register_agent
 import sys
 from copy import deepcopy
 from random import randint
-
+from math import log, sqrt
+from datetime import datetime, timedelta
 
 @register_agent("student_agent")
 class StudentAgent(Agent):
@@ -12,7 +13,6 @@ class StudentAgent(Agent):
     A dummy class for your implementation. Feel free to use this class to
     add any helper functionalities needed for your agent.
     """
-
     def __init__(self):
         super(StudentAgent, self).__init__()
         self.name = "StudentAgent"
@@ -89,3 +89,95 @@ class StudentAgent(Agent):
 
         # dummy return
         #return my_pos, self.dir_map["u"]
+
+class MonteCarlo:
+    """
+    MCTS algorithm
+    """
+    def __init__(self, chess_board, my_pos, adv_pos, max_step, **kwargs):
+        """
+        Initializing
+        """
+        self.chess_board = chess_board
+        self.my_pos = my_pos
+        self.adv_pos = adv_pos
+        self.max_step = max_step
+
+        seconds = kwargs.get('time', 1.99)
+        self.calculation_time = datetime.timedelta(seconds=seconds)
+
+        # self.preprocessing = True 
+
+        self.max_moves = kwargs.get('max_moves', 100)
+
+    def get_play(self):
+        """
+        Calculate best move for the current game state
+        and returns my_pos, dir as ((x,y), dir)
+        """
+        begin = datetime.datetime.utcnow()
+        while datetime.datetime.utcnow() - begin < self.calculation_time:
+            self.run_sim()
+
+    def run_sim(self):
+        """
+        Runs simulations
+        """
+        chess_board = deepcopy(self.chess_board)
+        my_pos = self.my_pos
+        adv_pos = self.adv_pos
+        max_step = self.max_step
+
+        expand = True
+        for t in range(self.max_moves): # run simulation until maximum amount of moves is reached
+            legal_moves = self.get_moves(chess_board, my_pos, adv_pos, max_step)
+            # moves_states = [(play, (play, num)) for play in moves] # moves and states in one list
+
+    def get_moves(self, chess_board, my_pos, adv_pos, max_step):
+        """
+        returns a list of random moves from sampling
+        """
+        moves = []
+        for i in range(max_step):
+            random_move = self.get_random_move(chess_board, my_pos, adv_pos, max_step)
+            moves.add(random_move)
+
+        return moves
+
+    def get_random_move(chess_board, my_pos, adv_pos, max_step):
+        """
+        returns a random move
+        """
+        # Moves (Up, Right, Down, Left)
+        ori_pos = deepcopy(my_pos)
+        moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
+        steps = randint(0, max_step + 1)
+
+        # Random Walk
+        for _ in range(steps):
+            r, c = my_pos
+            dir = randint(0, 4)
+            m_r, m_c = moves[dir]
+            my_pos = (r + m_r, c + m_c)
+
+            # Special Case enclosed by Adversary
+            k = 0
+            while chess_board[r, c, dir] or my_pos == adv_pos:
+                k += 1
+                if k > 300:
+                    break
+                dir = randint(0, 4)
+                m_r, m_c = moves[dir]
+                my_pos = (r + m_r, c + m_c)
+
+            if k > 300:
+                my_pos = ori_pos
+                break
+
+        # Put Barrier
+        dir = randint(0, 4)
+        r, c = my_pos
+        while chess_board[r, c, dir]:
+            dir = randint(0, 4)
+
+        return my_pos, dir
