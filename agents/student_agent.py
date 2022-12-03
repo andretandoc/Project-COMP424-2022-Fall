@@ -269,7 +269,7 @@ class MonteCarlo:
         # Moves (Up, Right, Down, Left)
         ori_pos = deepcopy(my_pos)
         moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
-        steps = randint(0, max_step + 1)
+        steps = randint(0, max_step)
 
         # Random Walk
         for _ in range(steps):
