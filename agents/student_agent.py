@@ -133,21 +133,21 @@ class MonteCarlo:
             legal_moves = self.get_moves(board, pos, adv, max_step)
             moves_states = [(play, (play, movecount)) for play in legal_moves] # moves and states in one list
 
-            if all(plays.get((player, S)) for p, S in moves_states):
+            if all(plays.get((player, S)) for p, S in moves_states): # if all choices were considered
                 log_total = log(sum(plays[(player, S)] for  p, S in moves_states))
 
                 value = 0
                 play, state = moves_states[0]
 
                 for p, S in moves_states[1:]:
-                    v = (wins[(player, S)]/plays[(player, S)])+self.C*sqrt(log_total/plays[(player, S)])
+                    v = (wins[(player, S)]/plays[(player, S)])+self.C*sqrt(log_total/plays[(player, S)]) #UCB1
                     if v > value:
                         value = v
                         play = p
                         state = S
             
             else:
-                play, state = choice(moves_states)
+                play, state = choice(moves_states) # choose a random move
 
             move, dir = play
             r, c = move
