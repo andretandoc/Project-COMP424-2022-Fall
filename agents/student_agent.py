@@ -40,15 +40,14 @@ class StudentAgent(Agent):
 
         Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
         """
-        if self.monte_carlo is None: 
+        while self.monte_carlo is None: 
             self.monte_carlo = MonteCarlo(chess_board, my_pos, adv_pos, max_step)
+        play = self.monte_carlo.get_play(chess_board, my_pos, adv_pos, max_step)
 
-        move = self.monte_carlo.get_play(chess_board, my_pos, adv_pos, max_step)
+        my_pos = play[0]
+        dir = play[1]
 
-        #my_pos = move[0]
-        #dir = move[1]
-
-        return move #my_pos, dir
+        return my_pos, dir
 
 class MonteCarlo:
     """
@@ -63,120 +62,129 @@ class MonteCarlo:
         self.adv_pos = adv_pos
         self.max_step = max_step
 
-        sec = kwargs.get('time', 1.95)
-        self.calculation_time = timedelta(seconds=sec)
+        self.compute_time = timedelta(seconds=(kwargs.get('time', 1.00))) # time allowed for each move
+        self.preprocessing = True # set to False once setup is over
+        self.max_moves = kwargs.get('max_moves', 300) # maximum moves allowed in simulations
 
-        self.preprocessing = True 
+        self.C = kwargs.get("C", 1.4) # set constant in UCB1 to 1.4
 
-        self.max_moves = kwargs.get('max_moves', 50)
+        self.wins = {} # wins from simulations
+        self.plays = {} # plays from simulations
+        self.playcount = 0 
 
-        self.C = kwargs.get("C", 1.4)
-
-        self.wins = {}
-        self.plays = {}
-        self.movecount = 0 
-
-    def get_play(self, board, my_pos, adv_pos, max_step):
+    def get_play(self, chessboard, my_pos, adv_pos, max_step):
         """
-        Calculate best move for the current game state
-        and returns move as ((x,y), dir)
+        Calculate best play for the current game state by running simulations during alloted time
+        and returns play as a tuple ((x,y), dir)
         """
-        self.chess_board = board
+        self.chess_board = chessboard
         self.my_pos = my_pos
         self.adv_pos = adv_pos
         self.max_step = max_step
-        player = True
-        self.movecount += 1
+        player = True 
+        self.playcount += 1
 
-        legal_moves = self.get_moves(self.chess_board, self.my_pos, self.adv_pos, self.max_step) # get list of legal random moves
+        # sample a list of legal random moves from our current position on the board
+        legal_moves = self.get_moves(self.chess_board, self.my_pos, self.adv_pos, self.max_step)
 
         begin = datetime.utcnow()
-
-        if self.preprocessing:
-            time = timedelta(seconds = 29.95)
+        if self.preprocessing: # if first turn of the game, we have more time to setup
+            time = timedelta(seconds = 15.00)
             self.preprocessing = False
         else:
-            time = self.calculation_time
+            time = self.compute_time
 
-        while datetime.utcnow() - begin < time:
-            self.run_sim()
+        while datetime.utcnow() - begin < time: # during the alloted time
+            self.run_sim() # run simulation
 
-        moves_states = [(play, (play, self.movecount)) for play in legal_moves] # moves and states in one list
+        play_states = [(move, (move, self.playcount)) for move in legal_moves]
+        play, state = play_states[0]
 
-        move, S = moves_states[0]
-        percent = self.wins.get((player, S), 0)/self.plays.get((player, S), 1)
-
-        for p, S in moves_states[1:]:
-            if self.wins.get((player, S), 0)/self.plays.get((player, S), 1) > percent:
-                move = p
-                percent = self.wins.get((player, S), 0)/self.plays.get((player, S), 1)
+        # calculate best play from simulation using wins/total plays
+        win_percentage = self.wins.get((player, state), 0)/self.plays.get((player, state), 1)
+        for p, state in play_states[1:]:
+            if self.wins.get((player, state), 0)/self.plays.get((player, state), 1) > win_percentage:
+                # update best play and wr%
+                play = p
+                win_percentage = self.wins.get((player, state), 0)/self.plays.get((player, state), 1)
         
-        self.movecount += 1
-        return move
+        self.playcount += 1 # +1 turn
+
+        return play
 
     def run_sim(self):
         """
-        Runs simulations
+        Simulates moves for as long as time allows or until
+        maximum moves parameter is reached
         """
-        board = deepcopy(self.chess_board)
-        pos = self.my_pos
-        adv = self.adv_pos
+        chessboard = deepcopy(self.chess_board) # to avoid modifying original board
+        plyr_pos = self.my_pos
+        enemy_pos = self.adv_pos
         max_step = self.max_step
+
         visited_states = set() # to store already visited states in the simulation
-        player = True
-        plays, wins = self.plays, self.wins
-        winner = None # initialize to None at first
-        movecount = self.movecount  
+        player = True # our turn first
+        winner = None # no winner at first
+        wins = self.wins # total wins
+        plays = self.plays # nb times visited
+        playcount = self.playcount
 
-        expand = True
-        for t in range(self.max_moves): # run simulation until maximum amount of moves is reached
-            legal_moves = self.get_moves(board, pos, adv, max_step)
-            moves_states = [(play, (play, movecount)) for play in legal_moves] # moves and states in one list
+        node_expansion = True
 
-            if all(plays.get((player, S)) for p, S in moves_states):
-                log_total = log(sum(plays[(player, S)] for  p, S in moves_states))
+        for _ in range(self.max_moves): # run simulation until maximum amount of moves is reached
+            legal_moves = self.get_moves(chessboard, plyr_pos, enemy_pos, max_step)
+            play_states = [(move, (move, playcount)) for move in legal_moves]
 
+            # Tree traversal
+            if all(plays.get((player, S)) for m, S in play_states): # if current state is not a leaf node
+                move, state = play_states[0]
                 value = 0
-                play, state = moves_states[0]
+                
+                # use UCB1 formula to decide which node to visit
+                log_calc = log(sum(plays[(player, S)] for  m, S in play_states))
+                for m, S in play_states[1:]:
+                    v = (wins[(player, S)]/plays[(player, S)])+self.C*sqrt(log_calc/plays[(player, S)])
 
-                for p, S in moves_states[1:]:
-                    v = (wins[(player, S)]/plays[(player, S)])+self.C*sqrt(log_total/plays[(player, S)])
                     if v > value:
                         value = v
-                        play = p
+                        move = m
                         state = S
             
+            # leaf node
             else:
-                play, state = choice(moves_states)
+                move, state = choice(play_states) # rollout
 
-            move, dir = play
-            r, c = move
-            board = self.apply_move(board, r, c, dir)
+            play, dir = move
+            r, c = play
+            chessboard = self.apply_move(chessboard, r, c, dir) # update state of chessboard from simulated move
 
-            if expand and (player, state) not in self.plays:
-                expand = False
+            if node_expansion and (player, state) not in self.plays: 
+                node_expansion = False # expand 1 state
                 self.plays[(player, state)] = 0
                 self.wins[(player, state)] = 0
 
-            visited_states.add((player, state))
+            visited_states.add((player, state)) # mark as visited
 
-            win, score = self.check_endgame(board, pos, adv)
+            win, score = self.check_endgame(chessboard, plyr_pos, enemy_pos)
             if win:
                 if score == 1:
                     winner = player
                 else:
                     winner = not player
                 break
-
-            pos = adv
-            adv = move
-            player = not player
-            movecount += 1
+            
+            # adversary's turn 
+            plyr_pos = enemy_pos
+            player = not player # switch to adversary
+            enemy_pos = play # adversary makes his play
+            playcount += 1
         
+        # after all simulations are finished, we update the total wins and plays of our simulation
         for player, state in visited_states:
             if (player, state) not in self.plays:
                 continue
             self.plays[(player, state)] += 1
+
             if winner is not None:
                 if player == winner:
                     self.wins[(player, state)] += 1
@@ -240,31 +248,35 @@ class MonteCarlo:
         """
         returns position from a simulation move on the board
         """
+        # Moves (Up, Right, Down, Left)
         moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
-        opposite_dir = {0: 2, 1: 3, 2: 0, 3: 1}
-        # 0 = up, 1 = right, 2 = down, 3 = left
 
-        board = deepcopy(chess_board)
+        # Opposite Directions
+        opposites = {0: 2, 1: 3, 2: 0, 3: 1} 
 
+        board = deepcopy(chess_board) # copy current state of the board
+        # simulate barrier on one side
         board[r, c, dir] = True
-
         move = moves[dir]
-        board[r + move[0], c + move[1], opposite_dir[dir]] = True
-        return board
+
+        # simulate barrier on opposite side
+        board[r + move[0], c + move[1], opposites[dir]] = True
+
+        return board # return state of the board
 
     def get_moves(self, chess_board, my_pos, adv_pos, max_step):
         """
         returns a list of random moves from sampling
         """
         moves = set()
-        for i in range(max_step*4):
+        for i in range(max_step*4): # times 4
             moves.add(self.get_random_move(chess_board, my_pos, adv_pos, max_step))
 
         return list(moves)
 
     def get_random_move(self, chess_board, my_pos, adv_pos, max_step):
         """
-        returns a random move
+        returns a random move as a tuple ((x,y),dir)
         """
         # Moves (Up, Right, Down, Left)
         ori_pos = deepcopy(my_pos)
