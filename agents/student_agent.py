@@ -84,9 +84,6 @@ class MonteCarlo:
         player = True 
         self.playcount += 1
 
-        # sample a list of legal random moves from our current position on the board
-        legal_moves = self.get_moves(self.chess_board, self.my_pos, self.adv_pos, self.max_step)
-
         begin = datetime.utcnow()
         if self.preprocessing: # if first turn of the game, we have more time to setup
             time = timedelta(seconds = 15.00)
@@ -96,6 +93,9 @@ class MonteCarlo:
 
         while datetime.utcnow() - begin < time: # during the alloted time
             self.run_sim() # run simulation
+
+        # sample a list of legal random moves from our current position on the board
+        legal_moves = self.get_moves(self.chess_board, self.my_pos, self.adv_pos, self.max_step)
 
         play_states = [(move, (move, self.playcount)) for move in legal_moves]
         play, state = play_states[0]
