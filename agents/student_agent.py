@@ -86,7 +86,7 @@ class MonteCarlo:
 
         begin = datetime.utcnow()
         if self.preprocessing: # if first turn of the game, we have more time to setup
-            time = timedelta(seconds = 15.00)
+            time = timedelta(seconds = 15.00) 
             self.preprocessing = False
         else:
             time = self.compute_time
@@ -246,7 +246,7 @@ class MonteCarlo:
     
     def apply_move(self, chess_board, r, c, dir):
         """
-        returns position from a simulation move on the board
+        returns board state from a simulated move
         """
         # Moves (Up, Right, Down, Left)
         moves = ((-1, 0), (0, 1), (1, 0), (0, -1))
