@@ -62,11 +62,11 @@ class MonteCarlo:
         self.adv_pos = adv_pos
         self.max_step = max_step
 
-        self.compute_time = timedelta(seconds=(kwargs.get('time', 1.00))) # time allowed for each move
+        self.compute_time = timedelta(seconds=(kwargs.get('time', 1.90))) # time allowed for each move
         self.preprocessing = True # set to False once setup is over
-        self.max_moves = kwargs.get('max_moves', 300) # maximum moves allowed in simulations
+        self.max_moves = kwargs.get('max_moves', 100) # maximum moves allowed in simulations
 
-        self.C = kwargs.get("C", 1.4) # set constant in UCB1 to 1.4
+        self.C = kwargs.get("C", 1.4) # set constant in UCT
 
         self.wins = {} # wins from simulations
         self.plays = {} # plays from simulations
@@ -83,10 +83,11 @@ class MonteCarlo:
         self.max_step = max_step
         player = True 
         self.playcount += 1
+        self.max_depth = 0
 
         begin = datetime.utcnow()
         if self.preprocessing: # if first turn of the game, we have more time to setup
-            time = timedelta(seconds = 15.00) 
+            time = timedelta(seconds = 29.90) 
             self.preprocessing = False
         else:
             time = self.compute_time
@@ -110,6 +111,10 @@ class MonteCarlo:
         
         self.playcount += 1 # +1 turn
 
+        # for debugging purposes    
+        # print("Max depth reached:", self.max_depth)
+        # print("Time taken:", datetime.utcnow() - begin)
+
         return play
 
     def run_sim(self):
@@ -130,8 +135,9 @@ class MonteCarlo:
         playcount = self.playcount
 
         node_expansion = True
-
-        for _ in range(self.max_moves): # run simulation until maximum amount of moves is reached
+        
+        # selection
+        for t in range(self.max_moves): # run simulation until maximum amount of moves is reached
             legal_moves = self.get_moves(chessboard, plyr_pos, enemy_pos, max_step)
             play_states = [(move, (move, playcount)) for move in legal_moves]
 
@@ -158,10 +164,13 @@ class MonteCarlo:
             r, c = play
             chessboard = self.apply_move(chessboard, r, c, dir) # update state of chessboard from simulated move
 
+            # expansion
             if node_expansion and (player, state) not in self.plays: 
                 node_expansion = False # expand 1 state
                 self.plays[(player, state)] = 0
                 self.wins[(player, state)] = 0
+                # if t > self.max_depth: 
+                    # self.max_depth = t
 
             visited_states.add((player, state)) # mark as visited
 
@@ -179,6 +188,7 @@ class MonteCarlo:
             enemy_pos = play # adversary makes his play
             playcount += 1
         
+        # update/back-propagation
         # after all simulations are finished, we update the total wins and plays of our simulation
         for player, state in visited_states:
             if (player, state) not in self.plays:
