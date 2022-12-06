@@ -66,7 +66,7 @@ class MonteCarlo:
         self.preprocessing = True # set to False once setup is over
         self.max_moves = kwargs.get('max_moves', 100) # maximum moves allowed in simulations
 
-        self.C = kwargs.get("C", 1.4) # set constant in UCT
+        self.C = kwargs.get("C", 1.3) # set constant in UCT
 
         self.wins = {} # wins from simulations
         self.plays = {} # plays from simulations
